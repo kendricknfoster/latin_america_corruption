@@ -1,0 +1,52 @@
+---
+title: "gather"
+author: "Kendrick Foster"
+date: "10/14/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(readxl)
+library(readr)
+```
+
+```{r CPI}
+
+# I don't want any spaces in the names, so I set.name_repair to Universal. I
+# only want countries in Latin America, so I filter for the "AME" in the Region
+# column and get rid of the United States and Canada in the dataset. I arrange
+# in alphabetical order to make future data merging easier.
+
+CPI2019 <- read_excel("raw_data/2019_CPI_FULLDATA/CPI2019.xlsx", 
+                      skip = 2, .name_repair = make.names) %>%
+  filter(Region == "AME", 
+         !(Country == "United States of America" | Country == "Canada")) %>%
+  select(Country, CPI.score.2019) %>%
+  arrange(Country)
+  
+``` 
+
+```{r WB_GDP}
+
+gdp_pc_data = read_excel("raw_data/API_NY.GDP.PCAP.CD_DS2_en_excel_v2_1495414.xls", 
+                         skip = 3, .name_repair = make.names) %>%
+  select(Country.Name, Country.Code, X2014, X2019)
+
+gdp_pc_meta = read_excel("raw_data/API_NY.GDP.PCAP.CD_DS2_en_excel_v2_1495414.xls", 
+                         sheet = 2, .name_repair = make.names)
+
+gdp_pc <- inner_join(gdp_pc_data, gdp_pc_meta, by = "Country.Code") %>%
+  filter(Region == "Latin America & Caribbean") %>%
+  select(Country.Name, X2014, X2019) %>%
+  arrange(Country.Name)
+  
+```
+
+```{r join}
+
+left_join(CPI2019, gdp_pc, by = c("Country" = "Country.Name"))
+
+```
+
