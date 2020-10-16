@@ -17,10 +17,10 @@ library(dplyr, warn.conflicts = FALSE)
 
 # Define UI for application that draws a histogram
 
-
+initial_join
 
 ui <- navbarPage(
-    "Final Project Title",
+    "Predicting Corruption in Latin America",
     
     tabPanel("Model",
              fluidPage(
@@ -37,10 +37,20 @@ ui <- navbarPage(
     tabPanel("About", 
              titlePanel("About"),
              h3("Project Background and Motivations"),
-             p("Hello, this is where I talk about my project."),
+             p("Hello, this is where I talk about my project. 
+               You can find a link to the underlying data and code here: 
+               https://github.com/kendricknfoster/latin_america_corruption"),
+             p("The current data is the Transparency International Corruption 
+               Perceptions Index (CPI) for 2019, the most recent year for which 
+               we have available data, and the World Bank's GDP per capita figures. 
+               I also plan to collect data on each country's Gini index from the 
+               World Bank, democratization from the Economist Intelligence Unit, 
+               and infrastructure spending from the World Bank. 
+               I will also see if I can find datasets on total campaign spending 
+               and public contracting law, though those may be harder to find."),
              h3("About Me"),
-             p("My name is ______ and I study ______. 
-             You can reach me at ______@college.harvard.edu.")))
+             p("My name is Kendrick Foster, and I study History and Government. 
+             You can reach me at kfoster@college.harvard.edu.")))
 
 
 # Define server logic required to draw a histogram
