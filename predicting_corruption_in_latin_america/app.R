@@ -1,23 +1,48 @@
-#
-# This is a Shiny web application. You can run the application by clicking
-# the 'Run App' button above.
-#
-# Find out more about building applications with Shiny here:
-#
-#    http://shiny.rstudio.com/
-#
-
-library(shiny)
-
 library(shiny)
 library(readr)
 library(tidyverse)
 library(ggplot2)
 library(dplyr, warn.conflicts = FALSE)
+library(readr)
+library(readxl)
 
 # Define UI for application that draws a histogram
 
-initial_join
+# I don't want any spaces in the names, so I set.name_repair to Universal. I
+# only want countries in Latin America, so I filter for the "AME" in the Region
+# column and get rid of the United States and Canada in the dataset. I arrange
+# in alphabetical order to make future data merging easier.
+
+CPI2019 <- read_excel("raw_data/2019_CPI_FULLDATA/CPI2019.xlsx", 
+                      skip = 2, .name_repair = make.names) %>%
+    filter(Region == "AME", 
+           !(Country == "United States of America" | Country == "Canada")) %>%
+    select(Country, CPI.score.2019) %>%
+    arrange(Country)
+
+# I include X2014 to include the latest available data from Venezuela. I'm
+# currently working on fixing this so I can create a column called
+# "latest_available", but I have too much going on this week to include it in
+# this milestone. I combine the dataset and the metadata so I can filter by
+# region and alphabetize to facilitate joining.
+
+gdp_pc_data = read_excel("raw_data/API_NY.GDP.PCAP.CD_DS2_en_excel_v2_1495414.xls", 
+                         skip = 3, .name_repair = make.names) %>%
+    select(Country.Name, Country.Code, X2014, X2019)
+
+gdp_pc_meta = read_excel("raw_data/API_NY.GDP.PCAP.CD_DS2_en_excel_v2_1495414.xls", 
+                         sheet = 2, .name_repair = make.names)
+
+gdp_pc <- inner_join(gdp_pc_data, gdp_pc_meta, by = "Country.Code") %>%
+    filter(Region == "Latin America & Caribbean") %>%
+    select(Country.Name, X2014, X2019) %>%
+    arrange(Country.Name)
+
+# I use a left join so I can filter out the Caribbean countries I don't really
+# care about, since they aren't in the Transparency International dataset in
+# CPI2019.
+
+initial_join <- left_join(CPI2019, gdp_pc, by = c("Country" = "Country.Name"))
 
 ui <- navbarPage(
     "Predicting Corruption in Latin America",
