@@ -1,0 +1,15 @@
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(sf)
+library(tidyverse)
+```
+
+```{r}
+
+map <- st_read("predicting_corruption_in_latin_america/raw_data/Shapefile")
+
+View(map)
+```
+

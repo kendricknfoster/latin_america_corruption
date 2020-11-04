@@ -10,6 +10,13 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(readxl)
 library(readr)
+library(sf)
+library(rstanarm)
+library(rvest)
+library(XML)
+library(RCurl)
+library(rlist)
+library(WDI)
 ```
 
 ```{r CPI}
@@ -19,36 +26,152 @@ library(readr)
 # column and get rid of the United States and Canada in the dataset. I arrange
 # in alphabetical order to make future data merging easier.
 
-CPI2019 <- read_excel("raw_data/2019_CPI_FULLDATA/CPI2019.xlsx", 
-                      skip = 2, .name_repair = make.names) %>%
+
+cpi_setup <- function(dataset, year, skip = 2, sheet = 1){
+  read_excel(dataset, 
+             skip = skip, 
+             sheet = sheet) %>%
   filter(Region == "AME", 
-         !(Country == "United States of America" | Country == "Canada")) %>%
-  select(Country, CPI.score.2019) %>%
-  arrange(Country)
+         !(Country == "United States of America" | Country == "Canada" | Country == "Bahamas" | 
+           Country == "Barbados" | Country == "Dominica" | Country == "Grenada" | Country == "Saint Lucia" | 
+           Country == "Saint Vincent and the Grenadines" | Country == "Trinidad and Tobago")) %>%
+    mutate(year = year)
+}
+  
+CPI2018 <- cpi_setup("shiny_app/raw_data/2018_CPI_FullDataSet.xlsx", 
+                     year = 2018) %>%
+  rename(CPI = `CPI Score 2018`) %>%
+  select(Country, CPI, year)
+
+CPI2017 <- cpi_setup("shiny_app/raw_data/CPI2017_FullDataSet.xlsx",
+                     year = 2017) %>%
+  rename(CPI = `CPI Score 2017`) %>%
+  select(Country, CPI, year)
+
+CPI2016 <- cpi_setup("shiny_app/raw_data/CPI2016_FullDataSetWithRegionalTables_200409_135127.xlsx", 
+                     sheet = 3, 
+                     skip = 0, 
+                     year = 2016) %>%
+  rename(CPI = CPI2016) %>%
+  select(Country, CPI, year) %>%
+  filter(!(Country == "The United States of America" | 
+           Country == "Saint Vincent and The Grenadines"))
+
+CPI2015 <- read_excel("shiny_app/raw_data/CPI_2015_FullDataSet.xlsx",
+                      sheet = 2) %>%
+  filter(!(Country == "United States of America" | Country == "Canada" | Country == "Bahamas" | 
+           Country == "Barbados" | Country == "Dominica" | Country == "Grenada" | Country == "Saint Lucia" | 
+           Country == "Saint Vincent and the Grenadines" | Country == "Trinidad and Tobago")) %>%
+  mutate(year = 2015) %>%
+  rename(CPI = `CPI 2015 Score`) %>%
+  filter(!Country == "United States") %>%
+  select(Country, CPI, year)
+
+CPI2014 <- cpi_setup("shiny_app/raw_data/CPI 2014_FullDataSet.xlsx",
+                     year = 2014, 
+                     skip = 0) %>%
+  filter(!(Country == "United States" | Country == "Puerto Rico")) %>%
+  rename(CPI = "CPI 2014") %>%
+  select(Country, CPI, year)
+
+CPI2013 <- cpi_setup("shiny_app/raw_data/CPI2013_GLOBAL_WithDataSourceScores.xls",
+                     year = 2013,
+                     skip = 0) %>%
+  rename(CPI = `CPI 2013 Score`) %>%
+  filter(!Country == "United States")
+
+CPI2013 <- CPI2013 %>%
+  select(Country, CPI, year) %>%
+  mutate(CPI = as.numeric(CPI))
+
+cpi_data <- bind_rows(CPI2013, CPI2014, CPI2015, CPI2016, CPI2017, CPI2018)
+
   
 ``` 
 
 ```{r WB_GDP}
 
-# I include X2014 to include the latest available data from Venezuela. I'm
-# currently working on fixing this so I can create a column called
-# "latest_available", but I have too much going on this week to include it in
-# this milestone. I combine the dataset and the metadata so I can filter by
-# region and alphabetize to facilitate joining.
+gdp_pc_data = read_excel("shiny_app/raw_data/API_NY.GDP.PCAP.CD_DS2_en_excel_v2_1495414.xls", 
+                         skip = 3, .name_repair = make.names)
 
-gdp_pc_data = read_excel("raw_data/API_NY.GDP.PCAP.CD_DS2_en_excel_v2_1495414.xls", 
-                         skip = 3, .name_repair = make.names) %>%
-  select(Country.Name, Country.Code, X2014, X2019)
-
-gdp_pc_meta = read_excel("raw_data/API_NY.GDP.PCAP.CD_DS2_en_excel_v2_1495414.xls", 
+gdp_pc_meta = read_excel("shiny_app/raw_data/API_NY.GDP.PCAP.CD_DS2_en_excel_v2_1495414.xls", 
                          sheet = 2, .name_repair = make.names)
 
 gdp_pc <- inner_join(gdp_pc_data, gdp_pc_meta, by = "Country.Code") %>%
   filter(Region == "Latin America & Caribbean") %>%
-  select(Country.Name, X2014, X2019) %>%
-  arrange(Country.Name)
-  
+  arrange(Country.Name) %>%
+  rename(Country = Country.Name) %>%
+  select(Country, X2013:X2018) %>%
+  pivot_longer(cols = X2013:X2018,
+               names_to = "year",
+               values_to = "GDP per Capita")
+
 ```
+
+```{r gini}
+
+gini_data = read_excel("shiny_app/raw_data/API_SI.POV.GINI_DS2_en_excel_v2_1495538 (1).xls", skip = 3, .name_repair = make.names)
+
+gini_data
+
+gini_meta = read_excel("shiny_app/raw_data/API_SI.POV.GINI_DS2_en_excel_v2_1495538 (1).xls", 
+                         sheet = 2, .name_repair = make.names)
+
+gini <- inner_join(gini_data, gini_meta, by = "Country.Code") %>%
+  filter(Region == "Latin America & Caribbean") %>%
+  rename(Country = Country.Name) %>%
+  select(Country, X2013:X2018) %>%
+  arrange(Country) %>%
+  pivot_longer(cols = X2013:X2018,
+               names_to = "year",
+               values_to = "Gini")
+
+gini
+
+```
+
+```{r spending}
+
+govt_spending_data = read_excel("shiny_app/raw_data/API_GC.XPN.TOTL.GD.ZS_DS2_en_excel_v2_1563752.xls", skip = 3, .name_repair = make.names)
+
+govt_spending_meta = read_excel("shiny_app/raw_data/API_GC.XPN.TOTL.GD.ZS_DS2_en_excel_v2_1563752.xls", 
+                         sheet = 2, .name_repair = make.names)
+
+govt_spending <- inner_join(govt_spending_data, govt_spending_meta, by = "Country.Code") %>%
+  filter(Region == "Latin America & Caribbean") %>%
+  rename(Country = Country.Name) %>%
+  select(Country, X2013:X2018) %>%
+  arrange(Country) %>%
+  pivot_longer(cols = X2013:X2018,
+               names_to = "year",
+               values_to = "Government Spending")
+
+govt_spending
+```
+```{r poverty}
+
+poverty_data = read_excel("shiny_app/raw_data/World Bank Poverty.xls", 
+                                skip = 3, 
+                                .name_repair = make.names)
+
+poverty_meta = read_excel("shiny_app/raw_data/World Bank Poverty.xls", 
+                         sheet = 2, 
+                         .name_repair = make.names)
+  
+poverty <- inner_join(govt_spending_data, govt_spending_meta, by = "Country.Code") %>%
+  filter(Region == "Latin America & Caribbean") %>%
+  rename(Country = Country.Name) %>%
+  select(Country, X2013:X2018) %>%
+  arrange(Country) %>%
+  pivot_longer(cols = X2013:X2018,
+               names_to = "year",
+               values_to = "Poverty Rate")
+
+poverty
+
+```
+
+
 
 ```{r join}
 
@@ -56,7 +179,96 @@ gdp_pc <- inner_join(gdp_pc_data, gdp_pc_meta, by = "Country.Code") %>%
 # care about, since they aren't in the Transparency International dataset in
 # CPI2019.
 
-initial_join <- left_join(CPI2019, gdp_pc, by = c("Country" = "Country.Name"))
+wb_data <- inner_join(gdp_pc, gini, by = c("Country", "year")) %>%
+  inner_join(., govt_spending, by = c("Country", "year")) %>%
+  inner_join(., poverty, by = c("Country", "year")) %>%
+  mutate(year = str_sub(year, 2, 5)) %>%
+  mutate(year = as.numeric(year))
+
+final_data <- left_join(cpi_data, wb_data, by = c("Country", "year")) %>%
+  left_join(., economic_freedom, by = c("Country", "year")) %>%
+  left_join(., bureaucratic_remuneration, by = c("Country" = "country_name", "year")) %>%
+  left_join(., public_finance, by = c("Country" = "country_name", "year"))
+
+saveRDS(final_data, file = "final_data.RDS")
+
+map <- st_read("predicting_corruption_in_latin_america/raw_data/Shapefile") %>%
+  rename("Country" = "CNTRY_NAME")
+
+CPI_shapefile <- left_join(initial_join, map, by = "Country")
+
+```
+
+```{r mapping_test}
+
+CPI_map <- new_join %>%
+  select(Country, X2014, CPI.score.2019, geometry) %>%
+  ggplot(aes(fill = CPI.score.2019, geometry = geometry)) +
+  geom_sf()
+
+saveRDS(CPI_map, file = "cpi_map.rds")
+```
+
+```{r ecfreedom}
+
+economic_freedom <- read_csv("shiny_app/raw_data/data.csv",
+         col_names = c("country_code", "Country", "id", "indicator", 
+                       "subindicator", "2013", "2014", "2015", "2016", 
+                       "2017", "2018"),
+         skip = 1) %>%
+  filter(id == 747,
+         subindicator == "Value") %>%
+  select(Country, "2013":"2018") %>%
+  pivot_longer(cols = "2013":"2018",
+               names_to = "year", 
+               values_to = "Economic Freedom") %>%
+  mutate(year = as.numeric(year))
+
+freedom_join <- left_join(spending_join, economic_freedom)
+
+saveRDS(freedom_join, file = "freedom_join.RDS")
+
+economic_freedom
+
+```
+
+```{r}
+
+stan_glm(data = freedom_join, 
+         family = gaussian(),
+         CPI.score.2019 ~ X2014,
+         refresh = 0) %>%
+  print(digits = 4)
+
+```
+
+```{r}
+
+dem_data <- read_csv("shiny_app/raw_data/V-Dem-CD-v10.csv")
+
+bureaucratic_remuneration <- dem_data %>%
+  select(country_name, year, v2strenadm_osp) %>%
+  drop_na() %>%
+  rename(`Bureaucratic Remuneration` = v2strenadm_osp) %>%
+  filter(year >= 2013)
+
+public_finance <- dem_data %>%
+  select(country_name, year, v2elpubfin_osp) %>%
+  drop_na() %>%
+  rename(`Public Campaign Finance` = v2elpubfin_osp) %>%
+  filter(year >= 2013)
+
+```
+```{r}
+
+infrastructure_spending <- read_csv("shiny_app/raw_data/Vista Total Sectores.csv",
+                                    col_names = c("Country", "year", "Type", "Sector",
+                                                  "Subsector", "National Currency (Millions)", 
+                                                  "US$ (millions)", "Percent of GDP"),
+                                    skip = 1) %>%
+  select(Country, year, `Percent of GDP`)
+
+
 
 ```
 
